@@ -1,21 +1,20 @@
 """
 ==============================================================================
-ATM INTELLIGENCE DEMAND FORECASTING - FORMATIVE ASSESSMENT 2
-Building Actionable Insights and Interactive Python Script
+ATM INTELLIGENCE DEMAND FORECASTING - STREAMLIT DASHBOARD
+Formative Assessment 2 - Interactive Data Mining Application
 ==============================================================================
 
-This script performs comprehensive data mining analysis on ATM transaction data:
+This Streamlit application provides an interactive interface for:
 - Stage 3: Exploratory Data Analysis (EDA)
 - Stage 4: Clustering Analysis of ATMs
 - Stage 5: Anomaly Detection on Holidays/Events
-- Stage 6: Interactive Planner Script
+- Stage 6: Interactive Planner
 
 Author: FinTrust Bank Ltd. Data Science Team
-Date: 2024
 ==============================================================================
 """
 
-# Import required libraries
+import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,394 +26,664 @@ from sklearn.ensemble import IsolationForest
 import warnings
 warnings.filterwarnings('ignore')
 
-# Set style for better visualizations
-plt.style.use('seaborn-v0_8')
-sns.set_palette("husl")
+# =============================================================================
+# PAGE CONFIGURATION
+# =============================================================================
+st.set_page_config(
+    page_title="ATM Intelligence Dashboard",
+    page_icon="🏦",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # =============================================================================
-# DATA LOADING
+# CUSTOM CSS STYLING
 # =============================================================================
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1E3A8A;
+        text-align: center;
+        padding: 20px;
+        background: linear-gradient(90deg, #E0F2FE, #BAE6FD);
+        border-radius: 15px;
+        margin-bottom: 20px;
+    }
+    .sub-header {
+        font-size: 1.8rem;
+        color: #1E40AF;
+        padding: 10px;
+        border-left: 5px solid #3B82F6;
+        background-color: #EFF6FF;
+        margin: 15px 0;
+    }
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        margin: 10px;
+    }
+    .insight-box {
+        background-color: #F0FDF4;
+        border: 2px solid #22C55E;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    .warning-box {
+        background-color: #FEF3C7;
+        border: 2px solid #F59E0B;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    .stSidebar {
+        background-color: #F8FAFC;
+    }
+    .mascot-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+        background: white;
+        padding: 10px;
+        border-radius: 50%;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+</style>
+""", unsafe_allow_html=True)
 
-def load_data(filepath='atm_cash_management_dataset.csv'):
-    """
-    Load the cleaned ATM dataset from FA-1
-    
-    Parameters:
-    -----------
-    filepath : str
-        Path to the CSV file
-    
-    Returns:
-    --------
-    DataFrame : Loaded dataset
-    """
-    print("="*80)
-    print("LOADING DATA")
-    print("="*80)
-    
-    df = pd.read_csv(filepath)
-    print(f"\n✓ Dataset loaded successfully!")
-    print(f"  - Total records: {len(df):,}")
-    print(f"  - Number of ATMs: {df['ATM_ID'].nunique()}")
-    print(f"  - Date range: {df['Date'].min()} to {df['Date'].max()}")
-    print(f"  - Columns: {len(df.columns)}")
-    
-    # Convert Date column to datetime
+# =============================================================================
+# DATA LOADING FUNCTION
+# =============================================================================
+@st.cache_data
+def load_data():
+    """Load and cache the ATM dataset"""
+    df = pd.read_csv('atm_cash_management_dataset.csv')
     df['Date'] = pd.to_datetime(df['Date'])
-    
-    # Display column info
-    print(f"\n  Columns in dataset:")
-    for col in df.columns:
-        print(f"    - {col}: {df[col].dtype}")
-    
     return df
 
 # =============================================================================
-# STAGE 3: EXPLORATORY DATA ANALYSIS (EDA)
+# SIDEBAR CONFIGURATION
 # =============================================================================
+def create_sidebar():
+    """Create the sidebar with navigation and filters"""
+    st.sidebar.title("🏦 ATM Intelligence")
+    st.sidebar.markdown("---")
+    
+    # Navigation
+    st.sidebar.header("📋 Navigation")
+    page = st.sidebar.radio(
+        "Select Analysis Stage:",
+        ["🏠 Home", "📊 EDA", "🎯 Clustering", "🔍 Anomaly Detection", "📈 Interactive Planner"],
+        label_visibility="collapsed"
+    )
+    
+    st.sidebar.markdown("---")
+    
+    # Global Filters
+    st.sidebar.header("🔧 Global Filters")
+    
+    df = load_data()
+    
+    # Date range filter
+    min_date = df['Date'].min().to_pydatetime()
+    max_date = df['Date'].max().to_pydatetime()
+    
+    date_range = st.sidebar.date_input(
+        "Select Date Range:",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
+    )
+    
+    # ATM selection
+    all_atms = ['All ATMs'] + sorted(df['ATM_ID'].unique().tolist())
+    selected_atm = st.sidebar.selectbox("Select ATM:", all_atms)
+    
+    # Location type filter
+    location_types = ['All Locations'] + df['Location_Type'].unique().tolist()
+    selected_location = st.sidebar.selectbox("Select Location Type:", location_types)
+    
+    st.sidebar.markdown("---")
+    
+    # About section
+    st.sidebar.header("ℹ️ About")
+    st.sidebar.info("""
+    **ATM Intelligence Dashboard**
+    
+    This application provides comprehensive 
+    data mining analysis for ATM cash 
+    demand forecasting.
+    
+    **Features:**
+    - EDA Visualizations
+    - K-Means Clustering
+    - Anomaly Detection
+    - Interactive Filtering
+    """)
+    
+    return page, date_range, selected_atm, selected_location
 
-def perform_eda(df):
-    """
-    Stage 3: Comprehensive Exploratory Data Analysis
+# =============================================================================
+# FILTER DATA FUNCTION
+# =============================================================================
+def filter_data(df, date_range, selected_atm, selected_location):
+    """Filter the dataset based on user selections"""
+    filtered_df = df.copy()
     
-    This section explores the dataset visually to uncover trends, relationships,
-    and patterns before applying advanced analysis techniques.
-    """
+    # Apply date filter
+    if len(date_range) == 2:
+        start_date = pd.to_datetime(date_range[0])
+        end_date = pd.to_datetime(date_range[1])
+        filtered_df = filtered_df[(filtered_df['Date'] >= start_date) & 
+                                  (filtered_df['Date'] <= end_date)]
     
-    print("\n" + "="*80)
-    print("STAGE 3: EXPLORATORY DATA ANALYSIS (EDA)")
-    print("="*80)
+    # Apply ATM filter
+    if selected_atm != 'All ATMs':
+        filtered_df = filtered_df[filtered_df['ATM_ID'] == selected_atm]
     
-    # Create output directory for visualizations
-    import os
-    os.makedirs('visualizations', exist_ok=True)
+    # Apply location filter
+    if selected_location != 'All Locations':
+        filtered_df = filtered_df[filtered_df['Location_Type'] == selected_location]
     
-    # -------------------------------------------------------------------------
-    # 3.1 DISTRIBUTION ANALYSIS
-    # -------------------------------------------------------------------------
-    print("\n[3.1] DISTRIBUTION ANALYSIS")
-    print("-" * 80)
+    return filtered_df
+
+# =============================================================================
+# HOME PAGE
+# =============================================================================
+def show_home_page(df):
+    """Display the home page with overview metrics"""
+    st.markdown('<h1 class="main-header">🏦 ATM Intelligence Demand Forecasting</h1>', 
+                unsafe_allow_html=True)
     
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    st.markdown('<h2 class="sub-header">📊 Dashboard Overview</h2>', 
+                unsafe_allow_html=True)
     
-    # Histogram of Total Withdrawals
-    axes[0, 0].hist(df['Total_Withdrawals'], bins=50, color='skyblue', edgecolor='black')
-    axes[0, 0].set_title('Distribution of Total Withdrawals', fontsize=14, fontweight='bold')
-    axes[0, 0].set_xlabel('Withdrawal Amount ($)')
-    axes[0, 0].set_ylabel('Frequency')
-    axes[0, 0].grid(True, alpha=0.3)
-    axes[0, 0].axvline(df['Total_Withdrawals'].mean(), color='red', linestyle='--', 
-                       linewidth=2, label=f'Mean: ${df["Total_Withdrawals"].mean():,.0f}')
-    axes[0, 0].legend()
-    print("  ✓ Histogram created for Total Withdrawals")
+    # Key Metrics Row
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Histogram of Total Deposits
-    axes[0, 1].hist(df['Total_Deposits'], bins=50, color='lightgreen', edgecolor='black')
-    axes[0, 1].set_title('Distribution of Total Deposits', fontsize=14, fontweight='bold')
-    axes[0, 1].set_xlabel('Deposit Amount ($)')
-    axes[0, 1].set_ylabel('Frequency')
-    axes[0, 1].grid(True, alpha=0.3)
-    axes[0, 1].axvline(df['Total_Deposits'].mean(), color='red', linestyle='--', 
-                       linewidth=2, label=f'Mean: ${df["Total_Deposits"].mean():,.0f}')
-    axes[0, 1].legend()
-    print("  ✓ Histogram created for Total Deposits")
+    with col1:
+        st.metric(
+            label="Total Records",
+            value=f"{len(df):,}",
+            delta="Historical Data"
+        )
     
-    # Box plot for Withdrawals
-    bp1 = axes[1, 0].boxplot(df['Total_Withdrawals'], patch_artist=True)
-    bp1['boxes'][0].set_facecolor('lightcoral')
-    axes[1, 0].set_title('Box Plot - Total Withdrawals (Outlier Detection)', 
-                        fontsize=14, fontweight='bold')
-    axes[1, 0].set_ylabel('Withdrawal Amount ($)')
-    axes[1, 0].grid(True, alpha=0.3)
-    print("  ✓ Box plot created for Withdrawals (outlier detection)")
+    with col2:
+        st.metric(
+            label="Number of ATMs",
+            value=df['ATM_ID'].nunique(),
+            delta="Active Locations"
+        )
     
-    # Box plot for Deposits
-    bp2 = axes[1, 1].boxplot(df['Total_Deposits'], patch_artist=True)
-    bp2['boxes'][0].set_facecolor('lightgreen')
-    axes[1, 1].set_title('Box Plot - Total Deposits (Outlier Detection)', 
-                        fontsize=14, fontweight='bold')
-    axes[1, 1].set_ylabel('Deposit Amount ($)')
-    axes[1, 1].grid(True, alpha=0.3)
-    print("  ✓ Box plot created for Deposits (outlier detection)")
+    with col3:
+        st.metric(
+            label="Avg Withdrawal",
+            value=f"${df['Total_Withdrawals'].mean():,.0f}",
+            delta="Daily Average"
+        )
     
-    plt.tight_layout()
-    plt.savefig('visualizations/3.1_distribution_analysis.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/3.1_distribution_analysis.png")
-    plt.close()
+    with col4:
+        st.metric(
+            label="Total Withdrawals",
+            value=f"${df['Total_Withdrawals'].sum():,.0f}",
+            delta="Cumulative"
+        )
     
-    print("\n  OBSERVATIONS:")
-    print(f"  - Withdrawals range: ${df['Total_Withdrawals'].min():,} - ${df['Total_Withdrawals'].max():,}")
-    print(f"  - Average withdrawal: ${df['Total_Withdrawals'].mean():,.2f}")
-    print(f"  - Median withdrawal: ${df['Total_Withdrawals'].median():,.2f}")
-    print(f"  - Standard deviation: ${df['Total_Withdrawals'].std():,.2f}")
+    st.markdown("---")
     
-    # -------------------------------------------------------------------------
-    # 3.2 TIME-BASED TRENDS
-    # -------------------------------------------------------------------------
-    print("\n[3.2] TIME-BASED TRENDS")
-    print("-" * 80)
+    # Quick Stats
+    st.markdown('<h3 class="sub-header">📈 Quick Statistics</h3>', 
+                unsafe_allow_html=True)
     
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    col1, col2 = st.columns(2)
     
-    # Line chart of withdrawals over time
+    with col1:
+        st.markdown("#### Transaction Summary")
+        summary_df = pd.DataFrame({
+            'Metric': ['Min Withdrawal', 'Max Withdrawal', 'Median Withdrawal', 
+                      'Std Deviation', 'Total Deposits'],
+            'Value': [f"${df['Total_Withdrawals'].min():,.0f}",
+                     f"${df['Total_Withdrawals'].max():,.0f}",
+                     f"${df['Total_Withdrawals'].median():,.0f}",
+                     f"${df['Total_Withdrawals'].std():,.0f}",
+                     f"${df['Total_Deposits'].sum():,.0f}"]
+        })
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    
+    with col2:
+        st.markdown("#### Data Distribution")
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        location_counts = df['Location_Type'].value_counts()
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8']
+        ax.pie(location_counts.values, labels=location_counts.index, autopct='%1.1f%%',
+               colors=colors[:len(location_counts)], startangle=90)
+        ax.set_title('ATM Distribution by Location Type', fontsize=14, fontweight='bold')
+        st.pyplot(fig)
+        plt.close()
+    
+    st.markdown("---")
+    
+    # Timeline
+    st.markdown('<h3 class="sub-header">📅 Withdrawal Timeline</h3>', 
+                unsafe_allow_html=True)
+    
     daily_withdrawals = df.groupby('Date')['Total_Withdrawals'].mean().reset_index()
-    axes[0, 0].plot(daily_withdrawals['Date'], daily_withdrawals['Total_Withdrawals'], 
-                   color='royalblue', linewidth=1.5, alpha=0.8)
-    axes[0, 0].fill_between(daily_withdrawals['Date'], daily_withdrawals['Total_Withdrawals'],
-                           alpha=0.3, color='royalblue')
-    axes[0, 0].set_title('Average Withdrawals Over Time', fontsize=14, fontweight='bold')
-    axes[0, 0].set_xlabel('Date')
-    axes[0, 0].set_ylabel('Average Withdrawal ($)')
-    axes[0, 0].tick_params(axis='x', rotation=45)
-    axes[0, 0].grid(True, alpha=0.3)
-    print("  ✓ Line chart created for withdrawals over time")
     
-    # Bar plot for Day of Week
-    dow_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    dow_withdrawals = df.groupby('Day_of_Week')['Total_Withdrawals'].mean().reindex(dow_order)
-    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE']
-    bars = axes[0, 1].bar(dow_order, dow_withdrawals.values, color=colors, edgecolor='black')
-    axes[0, 1].set_title('Average Withdrawals by Day of Week', fontsize=14, fontweight='bold')
-    axes[0, 1].set_xlabel('Day of Week')
-    axes[0, 1].set_ylabel('Average Withdrawal ($)')
-    axes[0, 1].tick_params(axis='x', rotation=45)
-    axes[0, 1].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Day of Week patterns")
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(daily_withdrawals['Date'], daily_withdrawals['Total_Withdrawals'], 
+            color='steelblue', linewidth=1.5, alpha=0.8)
+    ax.fill_between(daily_withdrawals['Date'], daily_withdrawals['Total_Withdrawals'],
+                   alpha=0.3, color='steelblue')
+    ax.set_xlabel('Date', fontsize=12)
+    ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+    ax.set_title('Average Daily Withdrawals Over Time', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    st.pyplot(fig)
+    plt.close()
     
-    # Bar plot for Time of Day
-    tod_order = ['Morning', 'Afternoon', 'Evening', 'Night']
-    tod_withdrawals = df.groupby('Time_of_Day')['Total_Withdrawals'].mean().reindex(tod_order)
-    bars = axes[1, 0].bar(tod_order, tod_withdrawals.values, 
+    # Key Insights
+    st.markdown('<h3 class="sub-header">💡 Key Insights</h3>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        <div class="insight-box">
+            <h4>🏆 Top Performance</h4>
+            <p><b>Best Day:</b> {}</p>
+            <p><b>Best Time:</b> {}</p>
+            <p><b>Best Weather:</b> {}</p>
+        </div>
+        """.format(
+            df.groupby('Day_of_Week')['Total_Withdrawals'].mean().idxmax(),
+            df.groupby('Time_of_Day')['Total_Withdrawals'].mean().idxmax(),
+            df.groupby('Weather_Condition')['Total_Withdrawals'].mean().idxmax()
+        ), unsafe_allow_html=True)
+    
+    with col2:
+        holiday_impact = df[df['Holiday_Flag']==1]['Total_Withdrawals'].mean()
+        normal_impact = df[df['Holiday_Flag']==0]['Total_Withdrawals'].mean()
+        holiday_change = ((holiday_impact - normal_impact) / normal_impact) * 100
+        
+        st.markdown("""
+        <div class="insight-box">
+            <h4>🎉 Holiday Impact</h4>
+            <p><b>Normal Days:</b> ${:,.0f}</p>
+            <p><b>Holidays:</b> ${:,.0f}</p>
+            <p><b>Change:</b> {:.1f}%</p>
+        </div>
+        """.format(normal_impact, holiday_impact, holiday_change), unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div class="insight-box">
+            <h4>📍 Location Insights</h4>
+            <p><b>Top Location:</b> {}</p>
+            <p><b>Total Locations:</b> {}</p>
+            <p><b>Weather Types:</b> {}</p>
+        </div>
+        """.format(
+            df.groupby('Location_Type')['Total_Withdrawals'].mean().idxmax(),
+            df['Location_Type'].nunique(),
+            df['Weather_Condition'].nunique()
+        ), unsafe_allow_html=True)
+
+# =============================================================================
+# EDA PAGE
+# =============================================================================
+def show_eda_page(df):
+    """Display the Exploratory Data Analysis page"""
+    st.markdown('<h1 class="main-header">📊 Exploratory Data Analysis</h1>', 
+                unsafe_allow_html=True)
+    
+    # Tabs for different EDA sections
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📈 Distribution", "⏰ Time Trends", "🎉 Holiday & Events", 
+        "🌤️ External Factors", "🔗 Relationships"
+    ])
+    
+    # Tab 1: Distribution Analysis
+    with tab1:
+        st.markdown('<h3 class="sub-header">Distribution Analysis</h3>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Total Withdrawals Distribution")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.hist(df['Total_Withdrawals'], bins=50, color='skyblue', edgecolor='black')
+            ax.axvline(df['Total_Withdrawals'].mean(), color='red', linestyle='--', 
+                       linewidth=2, label=f'Mean: ${df["Total_Withdrawals"].mean():,.0f}')
+            ax.set_xlabel('Withdrawal Amount ($)', fontsize=12)
+            ax.set_ylabel('Frequency', fontsize=12)
+            ax.set_title('Distribution of Total Withdrawals', fontsize=14, fontweight='bold')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close()
+        
+        with col2:
+            st.markdown("#### Total Deposits Distribution")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.hist(df['Total_Deposits'], bins=50, color='lightgreen', edgecolor='black')
+            ax.axvline(df['Total_Deposits'].mean(), color='red', linestyle='--', 
+                       linewidth=2, label=f'Mean: ${df["Total_Deposits"].mean():,.0f}')
+            ax.set_xlabel('Deposit Amount ($)', fontsize=12)
+            ax.set_ylabel('Frequency', fontsize=12)
+            ax.set_title('Distribution of Total Deposits', fontsize=14, fontweight='bold')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close()
+        
+        # Box plots
+        st.markdown("#### Box Plots for Outlier Detection")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            bp = ax.boxplot(df['Total_Withdrawals'], patch_artist=True)
+            bp['boxes'][0].set_facecolor('lightcoral')
+            ax.set_title('Box Plot - Total Withdrawals', fontsize=14, fontweight='bold')
+            ax.set_ylabel('Withdrawal Amount ($)')
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close()
+        
+        with col2:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            bp = ax.boxplot(df['Total_Deposits'], patch_artist=True)
+            bp['boxes'][0].set_facecolor('lightgreen')
+            ax.set_title('Box Plot - Total Deposits', fontsize=14, fontweight='bold')
+            ax.set_ylabel('Deposit Amount ($)')
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close()
+    
+    # Tab 2: Time Trends
+    with tab2:
+        st.markdown('<h3 class="sub-header">Time-Based Trends</h3>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Withdrawals by Day of Week")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            dow_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            dow_withdrawals = df.groupby('Day_of_Week')['Total_Withdrawals'].mean().reindex(dow_order)
+            colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE']
+            bars = ax.bar(dow_order, dow_withdrawals.values, color=colors, edgecolor='black')
+            ax.set_xlabel('Day of Week', fontsize=12)
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Average Withdrawals by Day of Week', fontsize=14, fontweight='bold')
+            ax.tick_params(axis='x', rotation=45)
+            ax.grid(True, alpha=0.3, axis='y')
+            st.pyplot(fig)
+            plt.close()
+            
+            # Best day insight
+            best_day = dow_withdrawals.idxmax()
+            st.info(f"🏆 **Highest withdrawal day:** {best_day} (${dow_withdrawals[best_day]:,.2f})")
+        
+        with col2:
+            st.markdown("#### Withdrawals by Time of Day")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            tod_order = ['Morning', 'Afternoon', 'Evening', 'Night']
+            tod_withdrawals = df.groupby('Time_of_Day')['Total_Withdrawals'].mean().reindex(tod_order)
+            bars = ax.bar(tod_order, tod_withdrawals.values, 
                          color=['#FFD93D', '#6BCB77', '#4D96FF', '#FF6B6B'], edgecolor='black')
-    axes[1, 0].set_title('Average Withdrawals by Time of Day', fontsize=14, fontweight='bold')
-    axes[1, 0].set_xlabel('Time of Day')
-    axes[1, 0].set_ylabel('Average Withdrawal ($)')
-    axes[1, 0].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Time of Day patterns")
+            ax.set_xlabel('Time of Day', fontsize=12)
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Average Withdrawals by Time of Day', fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3, axis='y')
+            st.pyplot(fig)
+            plt.close()
+            
+            best_time = tod_withdrawals.idxmax()
+            st.info(f"⏰ **Peak withdrawal time:** {best_time} (${tod_withdrawals[best_time]:,.2f})")
+        
+        # Monthly trend
+        st.markdown("#### Monthly Withdrawal Trend")
+        df['Month'] = df['Date'].dt.to_period('M')
+        monthly_withdrawals = df.groupby('Month')['Total_Withdrawals'].mean()
+        
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.bar(range(len(monthly_withdrawals)), monthly_withdrawals.values, 
+               color='steelblue', edgecolor='black')
+        ax.set_xlabel('Month', fontsize=12)
+        ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+        ax.set_title('Monthly Withdrawal Trend', fontsize=14, fontweight='bold')
+        ax.set_xticks(range(len(monthly_withdrawals)))
+        ax.set_xticklabels([str(m) for m in monthly_withdrawals.index], rotation=45, ha='right')
+        ax.grid(True, alpha=0.3, axis='y')
+        st.pyplot(fig)
+        plt.close()
     
-    # Monthly trend
-    df['Month'] = df['Date'].dt.to_period('M')
-    monthly_withdrawals = df.groupby('Month')['Total_Withdrawals'].mean()
-    axes[1, 1].bar(range(len(monthly_withdrawals)), monthly_withdrawals.values, 
-                  color='steelblue', edgecolor='black')
-    axes[1, 1].set_title('Monthly Withdrawal Trend', fontsize=14, fontweight='bold')
-    axes[1, 1].set_xlabel('Month')
-    axes[1, 1].set_ylabel('Average Withdrawal ($)')
-    axes[1, 1].set_xticks(range(len(monthly_withdrawals)))
-    axes[1, 1].set_xticklabels([str(m) for m in monthly_withdrawals.index], rotation=45, ha='right')
-    axes[1, 1].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Monthly trend bar chart created")
-    
-    plt.tight_layout()
-    plt.savefig('visualizations/3.2_time_based_trends.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/3.2_time_based_trends.png")
-    plt.close()
-    
-    print("\n  OBSERVATIONS:")
-    highest_dow = dow_withdrawals.idxmax()
-    lowest_dow = dow_withdrawals.idxmin()
-    print(f"  - Highest withdrawal day: {highest_dow} (${dow_withdrawals[highest_dow]:,.2f})")
-    print(f"  - Lowest withdrawal day: {lowest_dow} (${dow_withdrawals[lowest_dow]:,.2f})")
-    
-    # -------------------------------------------------------------------------
-    # 3.3 HOLIDAY & EVENT IMPACT
-    # -------------------------------------------------------------------------
-    print("\n[3.3] HOLIDAY & EVENT IMPACT")
-    print("-" * 80)
-    
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    
-    # Holiday impact
-    holiday_withdrawals = df.groupby('Holiday_Flag')['Total_Withdrawals'].mean()
-    holiday_labels = ['Normal Day', 'Holiday']
-    colors = ['#95E1D3', '#F38181']
-    bars = axes[0, 0].bar(holiday_labels, holiday_withdrawals.values, color=colors, edgecolor='black')
-    axes[0, 0].set_title('Withdrawals: Normal vs Holiday Days', fontsize=14, fontweight='bold')
-    axes[0, 0].set_ylabel('Average Withdrawal ($)')
-    axes[0, 0].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Holiday impact")
-    
-    # Special Event impact
-    event_withdrawals = df.groupby('Special_Event_Flag')['Total_Withdrawals'].mean()
-    event_labels = ['No Event', 'Special Event']
-    bars = axes[0, 1].bar(event_labels, event_withdrawals.values, 
+    # Tab 3: Holiday & Events
+    with tab3:
+        st.markdown('<h3 class="sub-header">Holiday & Event Impact</h3>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Normal vs Holiday Days")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            holiday_withdrawals = df.groupby('Holiday_Flag')['Total_Withdrawals'].mean()
+            holiday_labels = ['Normal Day', 'Holiday']
+            bars = ax.bar(holiday_labels, holiday_withdrawals.values, 
+                         color=['#95E1D3', '#F38181'], edgecolor='black')
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Withdrawals: Normal vs Holiday Days', fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3, axis='y')
+            
+            for bar, val in zip(bars, holiday_withdrawals.values):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 500, 
+                       f'${val:,.0f}', ha='center', va='bottom', fontweight='bold')
+            
+            st.pyplot(fig)
+            plt.close()
+        
+        with col2:
+            st.markdown("#### Special Event Impact")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            event_withdrawals = df.groupby('Special_Event_Flag')['Total_Withdrawals'].mean()
+            event_labels = ['No Event', 'Special Event']
+            bars = ax.bar(event_labels, event_withdrawals.values, 
                          color=['#A8D8EA', '#AA96DA'], edgecolor='black')
-    axes[0, 1].set_title('Withdrawals: Normal vs Special Event Days', fontsize=14, fontweight='bold')
-    axes[0, 1].set_ylabel('Average Withdrawal ($)')
-    axes[0, 1].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Special Event impact")
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Withdrawals: Normal vs Special Event Days', fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3, axis='y')
+            
+            for bar, val in zip(bars, event_withdrawals.values):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 500, 
+                       f'${val:,.0f}', ha='center', va='bottom', fontweight='bold')
+            
+            st.pyplot(fig)
+            plt.close()
+        
+        # Combined analysis
+        st.markdown("#### Combined Holiday & Event Analysis")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        combined = df.groupby(['Holiday_Flag', 'Special_Event_Flag'])['Total_Withdrawals'].mean().unstack()
+        combined.plot(kind='bar', ax=ax, color=['#A8D8EA', '#AA96DA'], edgecolor='black')
+        ax.set_xlabel('Holiday Flag', fontsize=12)
+        ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+        ax.set_title('Withdrawals by Holiday and Event Combination', fontsize=14, fontweight='bold')
+        ax.set_xticklabels(['Normal Day', 'Holiday'], rotation=0)
+        ax.legend(['No Event', 'Special Event'])
+        ax.grid(True, alpha=0.3, axis='y')
+        st.pyplot(fig)
+        plt.close()
+        
+        # Statistics
+        holiday_change = ((df[df['Holiday_Flag']==1]['Total_Withdrawals'].mean() - 
+                          df[df['Holiday_Flag']==0]['Total_Withdrawals'].mean()) / 
+                         df[df['Holiday_Flag']==0]['Total_Withdrawals'].mean()) * 100
+        
+        st.markdown(f"""
+        <div class="insight-box">
+            <h4>💡 Key Findings</h4>
+            <ul>
+                <li>Holiday days show a <b>{abs(holiday_change):.1f}% {'increase' if holiday_change > 0 else 'decrease'}</b> in withdrawals</li>
+                <li>Total holiday records: <b>{df['Holiday_Flag'].sum()}</b></li>
+                <li>Total special event records: <b>{df['Special_Event_Flag'].sum()}</b></li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Combined Holiday and Event impact
-    combined = df.groupby(['Holiday_Flag', 'Special_Event_Flag'])['Total_Withdrawals'].mean().unstack()
-    combined.plot(kind='bar', ax=axes[1, 0], color=['#A8D8EA', '#AA96DA'], edgecolor='black')
-    axes[1, 0].set_title('Withdrawals by Holiday and Event Combination', fontsize=14, fontweight='bold')
-    axes[1, 0].set_xlabel('Holiday Flag')
-    axes[1, 0].set_ylabel('Average Withdrawal ($)')
-    axes[1, 0].set_xticklabels(['Normal Day', 'Holiday'], rotation=0)
-    axes[1, 0].legend(['No Event', 'Special Event'])
-    axes[1, 0].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Combined holiday and event analysis created")
-    
-    # Count of records by holiday/event
-    holiday_counts = df.groupby(['Holiday_Flag', 'Special_Event_Flag']).size().unstack()
-    holiday_counts.plot(kind='bar', ax=axes[1, 1], color=['#95E1D3', '#F38181'], edgecolor='black')
-    axes[1, 1].set_title('Number of Records by Holiday/Event', fontsize=14, fontweight='bold')
-    axes[1, 1].set_xlabel('Holiday Flag')
-    axes[1, 1].set_ylabel('Count')
-    axes[1, 1].set_xticklabels(['Normal Day', 'Holiday'], rotation=0)
-    axes[1, 1].legend(['No Event', 'Special Event'])
-    axes[1, 1].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Record count by holiday/event created")
-    
-    plt.tight_layout()
-    plt.savefig('visualizations/3.3_holiday_event_impact.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/3.3_holiday_event_impact.png")
-    plt.close()
-    
-    # -------------------------------------------------------------------------
-    # 3.4 EXTERNAL FACTORS
-    # -------------------------------------------------------------------------
-    print("\n[3.4] EXTERNAL FACTORS")
-    print("-" * 80)
-    
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    
-    # Weather condition impact
-    weather_order = ['Clear', 'Cloudy', 'Rainy', 'Snowy']
-    weather_withdrawals = df.groupby('Weather_Condition')['Total_Withdrawals'].mean().reindex(weather_order)
-    weather_colors = ['#FFD93D', '#B0BEC5', '#64B5F6', '#E8EAF6']
-    bars = axes[0, 0].bar(weather_order, weather_withdrawals.values, color=weather_colors, edgecolor='black')
-    axes[0, 0].set_title('Average Withdrawals by Weather Condition', fontsize=14, fontweight='bold')
-    axes[0, 0].set_ylabel('Average Withdrawal ($)')
-    axes[0, 0].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Weather Condition")
-    
-    # Box plot by weather
-    weather_data = [df[df['Weather_Condition'] == w]['Total_Withdrawals'].values for w in weather_order]
-    bp = axes[0, 1].boxplot(weather_data, labels=weather_order, patch_artist=True)
-    for patch, color in zip(bp['boxes'], weather_colors):
-        patch.set_facecolor(color)
-    axes[0, 1].set_title('Withdrawal Distribution by Weather', fontsize=14, fontweight='bold')
-    axes[0, 1].set_ylabel('Withdrawal Amount ($)')
-    axes[0, 1].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Box plot created for Weather Condition")
-    
-    # Competitor ATM impact
-    competitor_withdrawals = df.groupby('Nearby_Competitor_ATMs')['Total_Withdrawals'].mean()
-    axes[1, 0].bar(competitor_withdrawals.index, competitor_withdrawals.values, 
-                  color='steelblue', edgecolor='black')
-    axes[1, 0].set_title('Withdrawals by Number of Competitor ATMs', fontsize=14, fontweight='bold')
-    axes[1, 0].set_xlabel('Number of Nearby Competitor ATMs')
-    axes[1, 0].set_ylabel('Average Withdrawal ($)')
-    axes[1, 0].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Competitor ATM impact")
-    
-    # Location Type impact
-    location_withdrawals = df.groupby('Location_Type')['Total_Withdrawals'].mean().sort_values(ascending=False)
-    location_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8']
-    bars = axes[1, 1].bar(range(len(location_withdrawals)), location_withdrawals.values, 
+    # Tab 4: External Factors
+    with tab4:
+        st.markdown('<h3 class="sub-header">External Factors Analysis</h3>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Weather Impact")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            weather_order = ['Clear', 'Cloudy', 'Rainy', 'Snowy']
+            weather_withdrawals = df.groupby('Weather_Condition')['Total_Withdrawals'].mean().reindex(weather_order)
+            weather_colors = ['#FFD93D', '#B0BEC5', '#64B5F6', '#E8EAF6']
+            bars = ax.bar(weather_order, weather_withdrawals.values, color=weather_colors, edgecolor='black')
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Average Withdrawals by Weather Condition', fontsize=14, fontweight='bold')
+            ax.grid(True, alpha=0.3, axis='y')
+            st.pyplot(fig)
+            plt.close()
+            
+            st.info(f"🌤️ **Best weather:** {weather_withdrawals.idxmax()} (${weather_withdrawals.max():,.2f})")
+        
+        with col2:
+            st.markdown("#### Location Type Impact")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            location_withdrawals = df.groupby('Location_Type')['Total_Withdrawals'].mean().sort_values(ascending=False)
+            location_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8']
+            bars = ax.bar(range(len(location_withdrawals)), location_withdrawals.values, 
                          color=location_colors[:len(location_withdrawals)], edgecolor='black')
-    axes[1, 1].set_title('Withdrawals by Location Type', fontsize=14, fontweight='bold')
-    axes[1, 1].set_xlabel('Location Type')
-    axes[1, 1].set_ylabel('Average Withdrawal ($)')
-    axes[1, 1].set_xticks(range(len(location_withdrawals)))
-    axes[1, 1].set_xticklabels(location_withdrawals.index, rotation=45, ha='right')
-    axes[1, 1].grid(True, alpha=0.3, axis='y')
-    print("  ✓ Bar plot created for Location Type")
+            ax.set_xlabel('Location Type', fontsize=12)
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Withdrawals by Location Type', fontsize=14, fontweight='bold')
+            ax.set_xticks(range(len(location_withdrawals)))
+            ax.set_xticklabels(location_withdrawals.index, rotation=45, ha='right')
+            ax.grid(True, alpha=0.3, axis='y')
+            st.pyplot(fig)
+            plt.close()
+            
+            st.info(f"📍 **Best location:** {location_withdrawals.idxmax()} (${location_withdrawals.max():,.2f})")
+        
+        # Competitor ATM analysis
+        st.markdown("#### Competitor ATM Impact")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        competitor_withdrawals = df.groupby('Nearby_Competitor_ATMs')['Total_Withdrawals'].mean()
+        ax.bar(competitor_withdrawals.index, competitor_withdrawals.values, 
+               color='steelblue', edgecolor='black')
+        ax.set_xlabel('Number of Nearby Competitor ATMs', fontsize=12)
+        ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+        ax.set_title('Withdrawals by Number of Competitor ATMs', fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y')
+        st.pyplot(fig)
+        plt.close()
     
-    plt.tight_layout()
-    plt.savefig('visualizations/3.4_external_factors.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/3.4_external_factors.png")
-    plt.close()
-    
-    print("\n  OBSERVATIONS:")
-    print(f"  - Best weather for withdrawals: {weather_withdrawals.idxmax()} (${weather_withdrawals.max():,.2f})")
-    print(f"  - Worst weather for withdrawals: {weather_withdrawals.idxmin()} (${weather_withdrawals.min():,.2f})")
-    print(f"  - Best location type: {location_withdrawals.idxmax()} (${location_withdrawals.max():,.2f})")
-    
-    # -------------------------------------------------------------------------
-    # 3.5 RELATIONSHIP ANALYSIS
-    # -------------------------------------------------------------------------
-    print("\n[3.5] RELATIONSHIP ANALYSIS")
-    print("-" * 80)
-    
-    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
-    
-    # Scatter plot: Previous Day Cash Level vs Next Day Demand
-    sample_size = min(1000, len(df))
-    sample_df = df.sample(n=sample_size, random_state=42)
-    
-    axes[0].scatter(sample_df['Previous_Day_Cash_Level'], 
-                   sample_df['Cash_Demand_Next_Day'],
-                   alpha=0.5, color='royalblue', s=20)
-    axes[0].set_title('Previous Day Cash Level vs Next Day Demand', fontsize=14, fontweight='bold')
-    axes[0].set_xlabel('Previous Day Cash Level ($)')
-    axes[0].set_ylabel('Cash Demand Next Day ($)')
-    axes[0].grid(True, alpha=0.3)
-    print("  ✓ Scatter plot created for cash level relationship")
-    
-    # Add trend line
-    z = np.polyfit(sample_df['Previous_Day_Cash_Level'], 
-                   sample_df['Cash_Demand_Next_Day'], 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(sample_df['Previous_Day_Cash_Level'].min(), 
-                        sample_df['Previous_Day_Cash_Level'].max(), 100)
-    axes[0].plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Trend Line')
-    axes[0].legend()
-    
-    # Correlation heatmap
-    numeric_cols = ['Total_Withdrawals', 'Total_Deposits', 'Previous_Day_Cash_Level', 
-                   'Cash_Demand_Next_Day', 'Holiday_Flag', 'Special_Event_Flag', 
-                   'Nearby_Competitor_ATMs']
-    correlation_matrix = df[numeric_cols].corr()
-    
-    im = axes[1].imshow(correlation_matrix, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
-    axes[1].set_xticks(range(len(numeric_cols)))
-    axes[1].set_yticks(range(len(numeric_cols)))
-    axes[1].set_xticklabels(numeric_cols, rotation=45, ha='right', fontsize=9)
-    axes[1].set_yticklabels(numeric_cols, fontsize=9)
-    axes[1].set_title('Correlation Heatmap of Numeric Features', fontsize=14, fontweight='bold')
-    
-    # Add correlation values
-    for i in range(len(numeric_cols)):
-        for j in range(len(numeric_cols)):
-            text = axes[1].text(j, i, f'{correlation_matrix.iloc[i, j]:.2f}',
-                              ha="center", va="center", color="black", fontsize=8)
-    
-    plt.colorbar(im, ax=axes[1])
-    plt.tight_layout()
-    plt.savefig('visualizations/3.5_relationship_analysis.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/3.5_relationship_analysis.png")
-    plt.close()
-    
-    print("\n  OBSERVATIONS:")
-    corr_withdrawals_deposit = correlation_matrix.loc['Total_Withdrawals', 'Total_Deposits']
-    print(f"  - Correlation between withdrawals and deposits: {corr_withdrawals_deposit:.3f}")
-    
-    print("\n" + "="*80)
-    print("✓ STAGE 3: EDA COMPLETED SUCCESSFULLY")
-    print("="*80)
+    # Tab 5: Relationships
+    with tab5:
+        st.markdown('<h3 class="sub-header">Relationship Analysis</h3>', 
+                    unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Cash Level vs Next Day Demand")
+            sample_df = df.sample(n=min(1000, len(df)), random_state=42)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.scatter(sample_df['Previous_Day_Cash_Level'], 
+                      sample_df['Cash_Demand_Next_Day'],
+                      alpha=0.5, color='royalblue', s=20)
+            
+            # Trend line
+            z = np.polyfit(sample_df['Previous_Day_Cash_Level'], 
+                          sample_df['Cash_Demand_Next_Day'], 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(sample_df['Previous_Day_Cash_Level'].min(), 
+                                sample_df['Previous_Day_Cash_Level'].max(), 100)
+            ax.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2, label='Trend Line')
+            
+            ax.set_xlabel('Previous Day Cash Level ($)', fontsize=12)
+            ax.set_ylabel('Cash Demand Next Day ($)', fontsize=12)
+            ax.set_title('Previous Day Cash Level vs Next Day Demand', fontsize=14, fontweight='bold')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close()
+        
+        with col2:
+            st.markdown("#### Correlation Heatmap")
+            numeric_cols = ['Total_Withdrawals', 'Total_Deposits', 'Previous_Day_Cash_Level', 
+                           'Cash_Demand_Next_Day', 'Holiday_Flag', 'Special_Event_Flag', 
+                           'Nearby_Competitor_ATMs']
+            correlation_matrix = df[numeric_cols].corr()
+            
+            fig, ax = plt.subplots(figsize=(10, 8))
+            im = ax.imshow(correlation_matrix, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+            ax.set_xticks(range(len(numeric_cols)))
+            ax.set_yticks(range(len(numeric_cols)))
+            ax.set_xticklabels(numeric_cols, rotation=45, ha='right', fontsize=9)
+            ax.set_yticklabels(numeric_cols, fontsize=9)
+            ax.set_title('Correlation Heatmap of Numeric Features', fontsize=14, fontweight='bold')
+            
+            for i in range(len(numeric_cols)):
+                for j in range(len(numeric_cols)):
+                    text = ax.text(j, i, f'{correlation_matrix.iloc[i, j]:.2f}',
+                                  ha="center", va="center", color="black", fontsize=8)
+            
+            plt.colorbar(im, ax=ax)
+            st.pyplot(fig)
+            plt.close()
 
 # =============================================================================
-# STAGE 4: CLUSTERING ANALYSIS
+# CLUSTERING PAGE
 # =============================================================================
-
-def perform_clustering(df):
-    """
-    Stage 4: Clustering Analysis of ATMs
-    """
+def show_clustering_page(df):
+    """Display the Clustering Analysis page"""
+    st.markdown('<h1 class="main-header">🎯 ATM Clustering Analysis</h1>', 
+                unsafe_allow_html=True)
     
-    print("\n" + "="*80)
-    print("STAGE 4: CLUSTERING ANALYSIS OF ATMs")
-    print("="*80)
+    st.markdown("""
+    <div class="insight-box">
+        <h4>About K-Means Clustering</h4>
+        <p>K-Means clustering groups ATMs based on similar demand patterns, enabling targeted cash management strategies.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # -------------------------------------------------------------------------
-    # 4.1 FEATURE SELECTION AND PREPARATION
-    # -------------------------------------------------------------------------
-    print("\n[4.1] FEATURE SELECTION AND PREPARATION")
-    print("-" * 80)
+    # Parameters
+    st.markdown('<h3 class="sub-header">⚙️ Clustering Parameters</h3>', 
+                unsafe_allow_html=True)
     
-    print("  Aggregating data by ATM...")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        n_clusters = st.slider("Number of Clusters (K)", min_value=2, max_value=10, value=5)
+    
+    with col2:
+        random_state = st.number_input("Random State", min_value=0, max_value=100, value=42)
+    
+    with col3:
+        run_clustering = st.button("🔄 Run Clustering", type="primary")
+    
+    # Prepare data for clustering
+    st.markdown('<h3 class="sub-header">📊 ATM Feature Aggregation</h3>', 
+                unsafe_allow_html=True)
+    
     atm_features = df.groupby('ATM_ID').agg({
         'Total_Withdrawals': ['mean', 'std', 'max', 'min'],
         'Total_Deposits': 'mean',
@@ -425,11 +694,11 @@ def perform_clustering(df):
     atm_features.columns = ['ATM_ID', 'Avg_Withdrawals', 'Std_Withdrawals', 
                            'Max_Withdrawals', 'Min_Withdrawals', 'Avg_Deposits', 
                            'Location_Type', 'Avg_Competitors']
-    
     atm_features['Std_Withdrawals'] = atm_features['Std_Withdrawals'].fillna(0)
     
-    print(f"  ✓ Aggregated data for {len(atm_features)} ATMs")
+    st.dataframe(atm_features.head(10), use_container_width=True)
     
+    # Encode categorical variables
     le = LabelEncoder()
     atm_features['Location_Encoded'] = le.fit_transform(atm_features['Location_Type'])
     
@@ -437,481 +706,506 @@ def perform_clustering(df):
                           'Avg_Deposits', 'Location_Encoded', 'Avg_Competitors']
     
     X = atm_features[clustering_features].copy()
-    print(f"  ✓ Selected {len(clustering_features)} features for clustering")
     
-    # -------------------------------------------------------------------------
-    # 4.2 FEATURE STANDARDIZATION
-    # -------------------------------------------------------------------------
-    print("\n[4.2] FEATURE STANDARDIZATION")
-    print("-" * 80)
-    
+    # Standardize
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    print("  ✓ Features standardized using StandardScaler")
     
-    # -------------------------------------------------------------------------
-    # 4.3 DETERMINE OPTIMAL CLUSTERS
-    # -------------------------------------------------------------------------
-    print("\n[4.3] DETERMINING OPTIMAL NUMBER OF CLUSTERS")
-    print("-" * 80)
+    # Determine optimal K
+    st.markdown('<h3 class="sub-header">📈 Optimal K Determination</h3>', 
+                unsafe_allow_html=True)
     
-    wcss = []
-    silhouette_scores = []
-    k_range = range(2, min(11, len(atm_features)))
+    col1, col2 = st.columns(2)
     
-    print("  Testing K values from 2 to 10...")
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        kmeans.fit(X_scaled)
-        wcss.append(kmeans.inertia_)
+    with col1:
+        st.markdown("#### Elbow Method")
+        wcss = []
+        k_range = range(2, min(11, len(atm_features)))
         
-        if len(set(kmeans.labels_)) > 1:
-            score = silhouette_score(X_scaled, kmeans.labels_)
+        for k in k_range:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            kmeans.fit(X_scaled)
+            wcss.append(kmeans.inertia_)
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(list(k_range), wcss, 'bo-', linewidth=2, markersize=8)
+        ax.set_xlabel('Number of Clusters (K)', fontsize=12)
+        ax.set_ylabel('WCSS', fontsize=12)
+        ax.set_title('Elbow Method - Optimal K', fontsize=14, fontweight='bold')
+        ax.axvline(x=n_clusters, color='red', linestyle='--', linewidth=2, 
+                   label=f'Selected K = {n_clusters}')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
+    
+    with col2:
+        st.markdown("#### Silhouette Scores")
+        silhouette_scores = []
+        
+        for k in k_range:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(X_scaled)
+            score = silhouette_score(X_scaled, labels)
             silhouette_scores.append(score)
-        else:
-            silhouette_scores.append(0)
         
-        print(f"    K={k}: WCSS={kmeans.inertia_:.2f}, Silhouette={silhouette_scores[-1]:.3f}")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(list(k_range), silhouette_scores, 'go-', linewidth=2, markersize=8)
+        ax.set_xlabel('Number of Clusters (K)', fontsize=12)
+        ax.set_ylabel('Silhouette Score', fontsize=12)
+        ax.set_title('Silhouette Scores', fontsize=14, fontweight='bold')
+        ax.axvline(x=n_clusters, color='red', linestyle='--', linewidth=2,
+                   label=f'Selected K = {n_clusters}')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
     
-    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    # Apply K-Means
+    st.markdown('<h3 class="sub-header">🎯 K-Means Clustering Results</h3>', 
+                unsafe_allow_html=True)
     
-    axes[0].plot(list(k_range), wcss, 'bo-', linewidth=2, markersize=8)
-    axes[0].set_xlabel('Number of Clusters (K)', fontsize=12)
-    axes[0].set_ylabel('WCSS', fontsize=12)
-    axes[0].set_title('Elbow Method - Optimal K', fontsize=14, fontweight='bold')
-    axes[0].grid(True, alpha=0.3)
-    
-    optimal_k = max(3, min(5, list(k_range)[np.argmax(silhouette_scores)]))
-    axes[0].axvline(x=optimal_k, color='red', linestyle='--', linewidth=2, 
-                   label=f'Optimal K = {optimal_k}')
-    axes[0].legend()
-    
-    axes[1].plot(list(k_range), silhouette_scores, 'go-', linewidth=2, markersize=8)
-    axes[1].set_xlabel('Number of Clusters (K)', fontsize=12)
-    axes[1].set_ylabel('Silhouette Score', fontsize=12)
-    axes[1].set_title('Silhouette Scores', fontsize=14, fontweight='bold')
-    axes[1].grid(True, alpha=0.3)
-    axes[1].axvline(x=optimal_k, color='red', linestyle='--', linewidth=2,
-                   label=f'Optimal K = {optimal_k}')
-    axes[1].legend()
-    
-    plt.tight_layout()
-    plt.savefig('visualizations/4.3_optimal_clusters.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/4.3_optimal_clusters.png")
-    plt.close()
-    
-    print(f"\n  ✓ Optimal number of clusters: K = {optimal_k}")
-    
-    # -------------------------------------------------------------------------
-    # 4.4 APPLY K-MEANS CLUSTERING
-    # -------------------------------------------------------------------------
-    print("\n[4.4] APPLYING K-MEANS CLUSTERING")
-    print("-" * 80)
-    
-    kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
     clusters = kmeans.fit_predict(X_scaled)
     atm_features['Cluster'] = clusters
     
-    print(f"  ✓ K-Means clustering completed with K={optimal_k}")
-    
-    # -------------------------------------------------------------------------
-    # 4.5 INTERPRET CLUSTERS
-    # -------------------------------------------------------------------------
-    print("\n[4.5] INTERPRETING CLUSTERS")
-    print("-" * 80)
-    
+    # Assign labels
     cluster_labels = {}
     overall_avg = atm_features['Avg_Withdrawals'].mean()
     
-    for cluster in range(optimal_k):
+    for cluster in range(n_clusters):
         cluster_data = atm_features[atm_features['Cluster'] == cluster]
         avg_withdrawal = cluster_data['Avg_Withdrawals'].mean()
         
-        if avg_withdrawal > overall_avg * 1.3:
-            cluster_labels[cluster] = "High-Demand Cluster"
-        elif avg_withdrawal > overall_avg * 0.7:
-            cluster_labels[cluster] = "Steady-Demand Cluster"
+        if avg_withdrawal > overall_avg * 1.2:
+            cluster_labels[cluster] = "High-Demand"
+        elif avg_withdrawal > overall_avg * 0.8:
+            cluster_labels[cluster] = "Steady-Demand"
         else:
-            cluster_labels[cluster] = "Low-Demand Cluster"
-        
-        print(f"\n  Cluster {cluster}: {cluster_labels[cluster]}")
-        print(f"    → Average Withdrawals: ${avg_withdrawal:,.2f}")
-        print(f"    → Number of ATMs: {len(cluster_data)}")
+            cluster_labels[cluster] = "Low-Demand"
     
     atm_features['Cluster_Label'] = atm_features['Cluster'].map(cluster_labels)
     
-    # -------------------------------------------------------------------------
-    # 4.6 VISUALIZE CLUSTERS
-    # -------------------------------------------------------------------------
-    print("\n[4.6] VISUALIZING CLUSTERS")
-    print("-" * 80)
+    # Cluster summary
+    st.markdown("#### Cluster Summary")
     
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    cluster_summary = atm_features.groupby('Cluster').agg({
+        'Avg_Withdrawals': 'mean',
+        'Std_Withdrawals': 'mean',
+        'ATM_ID': 'count',
+        'Cluster_Label': 'first'
+    }).reset_index()
+    cluster_summary.columns = ['Cluster', 'Avg Withdrawal', 'Volatility', 'ATM Count', 'Label']
     
-    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8']
-    for cluster in range(optimal_k):
-        mask = atm_features['Cluster'] == cluster
-        axes[0, 0].scatter(atm_features.loc[mask, 'Avg_Withdrawals'],
-                          atm_features.loc[mask, 'Std_Withdrawals'],
-                          label=cluster_labels[cluster], s=100, alpha=0.7,
-                          color=colors[cluster], edgecolors='black', linewidth=1.5)
-    axes[0, 0].set_xlabel('Average Withdrawals ($)', fontsize=12)
-    axes[0, 0].set_ylabel('Withdrawal Std Dev ($)', fontsize=12)
-    axes[0, 0].set_title('ATM Clusters: Avg Withdrawals vs Volatility', fontsize=14, fontweight='bold')
-    axes[0, 0].legend(loc='best', fontsize=9)
-    axes[0, 0].grid(True, alpha=0.3)
+    st.dataframe(cluster_summary.style.format({
+        'Avg Withdrawal': '${:,.2f}',
+        'Volatility': '${:,.2f}'
+    }), use_container_width=True)
     
-    cluster_avg = atm_features.groupby('Cluster_Label')['Avg_Withdrawals'].mean()
-    cluster_avg.plot(kind='bar', ax=axes[0, 1], color=colors[:optimal_k], edgecolor='black')
-    axes[0, 1].set_title('Average Withdrawals by Cluster', fontsize=14, fontweight='bold')
-    axes[0, 1].set_ylabel('Average Withdrawal ($)')
-    axes[0, 1].tick_params(axis='x', rotation=45)
-    axes[0, 1].grid(True, alpha=0.3, axis='y')
+    # Visualizations
+    col1, col2 = st.columns(2)
     
-    cluster_counts = atm_features['Cluster_Label'].value_counts()
-    axes[1, 0].bar(cluster_counts.index, cluster_counts.values, 
-                   color=colors[:optimal_k], edgecolor='black')
-    axes[1, 0].set_title('Number of ATMs per Cluster', fontsize=14, fontweight='bold')
-    axes[1, 0].set_ylabel('Count')
-    axes[1, 0].tick_params(axis='x', rotation=45)
-    axes[1, 0].grid(True, alpha=0.3, axis='y')
+    with col1:
+        st.markdown("#### Clusters: Withdrawals vs Volatility")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', 
+                  '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8B500', '#82E0AA']
+        
+        for cluster in range(n_clusters):
+            mask = atm_features['Cluster'] == cluster
+            ax.scatter(atm_features.loc[mask, 'Avg_Withdrawals'],
+                      atm_features.loc[mask, 'Std_Withdrawals'],
+                      label=f'{cluster_labels[cluster]} (Cluster {cluster})',
+                      s=100, alpha=0.7, color=colors[cluster], edgecolors='black')
+        
+        ax.set_xlabel('Average Withdrawals ($)', fontsize=12)
+        ax.set_ylabel('Withdrawal Std Dev ($)', fontsize=12)
+        ax.set_title('ATM Clusters: Avg Withdrawals vs Volatility', fontsize=14, fontweight='bold')
+        ax.legend(loc='best', fontsize=9)
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
     
+    with col2:
+        st.markdown("#### ATM Count by Cluster")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        cluster_counts = atm_features['Cluster_Label'].value_counts()
+        ax.bar(cluster_counts.index, cluster_counts.values, 
+               color=colors[:len(cluster_counts)], edgecolor='black')
+        ax.set_xlabel('Cluster Label', fontsize=12)
+        ax.set_ylabel('Count', fontsize=12)
+        ax.set_title('Number of ATMs per Cluster', fontsize=14, fontweight='bold')
+        ax.tick_params(axis='x', rotation=45)
+        ax.grid(True, alpha=0.3, axis='y')
+        st.pyplot(fig)
+        plt.close()
+    
+    # Location distribution by cluster
+    st.markdown("#### Location Distribution by Cluster")
+    fig, ax = plt.subplots(figsize=(12, 6))
     cluster_location = atm_features.groupby(['Cluster_Label', 'Location_Type']).size().unstack(fill_value=0)
-    cluster_location.plot(kind='bar', stacked=True, ax=axes[1, 1], colormap='viridis', edgecolor='black')
-    axes[1, 1].set_title('Location Type Distribution by Cluster', fontsize=14, fontweight='bold')
-    axes[1, 1].set_ylabel('Count')
-    axes[1, 1].tick_params(axis='x', rotation=45)
-    axes[1, 1].legend(title='Location Type', bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-    plt.tight_layout()
-    plt.savefig('visualizations/4.6_cluster_visualizations.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/4.6_cluster_visualizations.png")
+    cluster_location.plot(kind='bar', stacked=True, ax=ax, colormap='viridis', edgecolor='black')
+    ax.set_xlabel('Cluster Label', fontsize=12)
+    ax.set_ylabel('Count', fontsize=12)
+    ax.set_title('Location Type Distribution by Cluster', fontsize=14, fontweight='bold')
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend(title='Location Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+    st.pyplot(fig)
     plt.close()
     
-    cluster_assignments = atm_features[['ATM_ID', 'Cluster', 'Cluster_Label', 
-                                       'Avg_Withdrawals', 'Std_Withdrawals', 'Location_Type']]
-    cluster_assignments.to_csv('atm_cluster_assignments.csv', index=False)
-    print("\n  → Saved: atm_cluster_assignments.csv")
+    # ATM assignments
+    st.markdown('<h3 class="sub-header">📋 ATM Cluster Assignments</h3>', 
+                unsafe_allow_html=True)
     
-    print("\n" + "="*80)
-    print("✓ STAGE 4: CLUSTERING ANALYSIS COMPLETED SUCCESSFULLY")
-    print("="*80)
-    
-    return atm_features, cluster_labels
+    atm_assignments = atm_features[['ATM_ID', 'Cluster', 'Cluster_Label', 
+                                    'Avg_Withdrawals', 'Std_Withdrawals', 'Location_Type']]
+    st.dataframe(atm_assignments.sort_values('Cluster'), use_container_width=True)
 
 # =============================================================================
-# STAGE 5: ANOMALY DETECTION
+# ANOMALY DETECTION PAGE
 # =============================================================================
-
-def perform_anomaly_detection(df):
-    """
-    Stage 5: Anomaly Detection on Holidays/Events
-    """
+def show_anomaly_page(df):
+    """Display the Anomaly Detection page"""
+    st.markdown('<h1 class="main-header">🔍 Anomaly Detection</h1>', 
+                unsafe_allow_html=True)
     
-    print("\n" + "="*80)
-    print("STAGE 5: ANOMALY DETECTION ON HOLIDAYS/EVENTS")
-    print("="*80)
+    st.markdown("""
+    <div class="warning-box">
+        <h4>About Anomaly Detection</h4>
+        <p>Anomalies are unusual or unexpected withdrawal patterns that deviate significantly from normal behavior. 
+        Detecting them helps prevent cash shortages or excessive stock.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # -------------------------------------------------------------------------
-    # 5.1 HOLIDAY VS NORMAL DAY COMPARISON
-    # -------------------------------------------------------------------------
-    print("\n[5.1] HOLIDAY VS NORMAL DAY COMPARISON")
-    print("-" * 80)
+    # Parameters
+    st.markdown('<h3 class="sub-header">⚙️ Detection Parameters</h3>', 
+                unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        z_threshold = st.slider("Z-Score Threshold", min_value=2.0, max_value=5.0, value=3.0, step=0.5)
+    
+    with col2:
+        contamination = st.slider("Isolation Forest Contamination", min_value=0.01, max_value=0.20, value=0.05, step=0.01)
+    
+    with col3:
+        run_detection = st.button("🔄 Run Detection", type="primary")
+    
+    # Holiday vs Normal comparison
+    st.markdown('<h3 class="sub-header">📊 Holiday vs Normal Day Comparison</h3>', 
+                unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
     
     normal_withdrawals = df[df['Holiday_Flag'] == 0]['Total_Withdrawals']
     holiday_withdrawals = df[df['Holiday_Flag'] == 1]['Total_Withdrawals']
     
-    print(f"  Normal days: {len(normal_withdrawals)} records, Mean: ${normal_withdrawals.mean():,.2f}")
-    print(f"  Holiday days: {len(holiday_withdrawals)} records, Mean: ${holiday_withdrawals.mean():,.2f}")
+    with col1:
+        st.metric("Normal Days", 
+                  value=f"${normal_withdrawals.mean():,.2f}",
+                  delta=f"{len(normal_withdrawals)} records")
     
-    # -------------------------------------------------------------------------
-    # 5.2 Z-SCORE BASED ANOMALY DETECTION
-    # -------------------------------------------------------------------------
-    print("\n[5.2] Z-SCORE BASED ANOMALY DETECTION")
-    print("-" * 80)
+    with col2:
+        st.metric("Holiday Days", 
+                  value=f"${holiday_withdrawals.mean():,.2f}",
+                  delta=f"{len(holiday_withdrawals)} records")
+    
+    # Z-Score Detection
+    st.markdown('<h3 class="sub-header">📈 Z-Score Based Detection</h3>', 
+                unsafe_allow_html=True)
     
     df['Withdrawal_ZScore'] = (df['Total_Withdrawals'] - df['Total_Withdrawals'].mean()) / \
                               df['Total_Withdrawals'].std()
+    df['Is_Anomaly_ZScore'] = np.abs(df['Withdrawal_ZScore']) > z_threshold
     
-    anomaly_threshold = 3
-    df['Is_Anomaly_ZScore'] = np.abs(df['Withdrawal_ZScore']) > anomaly_threshold
+    num_anomalies_zscore = df['Is_Anomaly_ZScore'].sum()
     
-    num_anomalies = df['Is_Anomaly_ZScore'].sum()
-    print(f"  ✓ Anomaly threshold: |Z-score| > {anomaly_threshold}")
-    print(f"  ✓ Number of anomalies detected: {num_anomalies} ({num_anomalies/len(df)*100:.2f}%)")
+    col1, col2 = st.columns(2)
     
-    # -------------------------------------------------------------------------
-    # 5.3 ISOLATION FOREST
-    # -------------------------------------------------------------------------
-    print("\n[5.3] ISOLATION FOREST FOR MULTIVARIATE ANOMALIES")
-    print("-" * 80)
+    with col1:
+        st.metric("Anomalies Detected (Z-Score)", 
+                  value=f"{num_anomalies_zscore}",
+                  delta=f"{num_anomalies_zscore/len(df)*100:.2f}% of total")
+        
+        st.markdown("#### Z-Score Distribution")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(df['Withdrawal_ZScore'], bins=50, color='lightblue', edgecolor='black')
+        ax.axvline(z_threshold, color='red', linestyle='--', linewidth=2, 
+                   label=f'Threshold = +{z_threshold}')
+        ax.axvline(-z_threshold, color='red', linestyle='--', linewidth=2,
+                   label=f'Threshold = -{z_threshold}')
+        ax.set_xlabel('Z-Score', fontsize=12)
+        ax.set_ylabel('Frequency', fontsize=12)
+        ax.set_title('Distribution of Z-Scores', fontsize=14, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
+    
+    with col2:
+        st.markdown("#### Withdrawals vs Deposits (Anomalies Highlighted)")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        normal_mask = ~df['Is_Anomaly_ZScore']
+        ax.scatter(df.loc[normal_mask, 'Total_Withdrawals'],
+                  df.loc[normal_mask, 'Total_Deposits'],
+                  color='steelblue', alpha=0.3, s=20, label='Normal')
+        ax.scatter(df.loc[~normal_mask, 'Total_Withdrawals'],
+                  df.loc[~normal_mask, 'Total_Deposits'],
+                  color='red', alpha=0.7, s=50, label='Anomaly', edgecolors='black')
+        ax.set_xlabel('Total Withdrawals ($)', fontsize=12)
+        ax.set_ylabel('Total Deposits ($)', fontsize=12)
+        ax.set_title('Anomalies: Withdrawals vs Deposits', fontsize=14, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
+    
+    # Isolation Forest
+    st.markdown('<h3 class="sub-header">🌲 Isolation Forest Detection</h3>', 
+                unsafe_allow_html=True)
     
     isolation_features = ['Total_Withdrawals', 'Total_Deposits', 'Holiday_Flag',
                          'Special_Event_Flag', 'Previous_Day_Cash_Level']
     X_iso = df[isolation_features].copy()
     
-    iso_forest = IsolationForest(contamination=0.05, random_state=42)
+    iso_forest = IsolationForest(contamination=contamination, random_state=42)
     df['Is_Anomaly_IsoForest'] = iso_forest.fit_predict(X_iso)
     df['Is_Anomaly_IsoForest'] = df['Is_Anomaly_IsoForest'] == -1
     
-    iso_anomalies = df['Is_Anomaly_IsoForest'].sum()
-    print(f"  ✓ Isolation Forest anomalies: {iso_anomalies} ({iso_anomalies/len(df)*100:.2f}%)")
+    num_anomalies_iso = df['Is_Anomaly_IsoForest'].sum()
     
-    # -------------------------------------------------------------------------
-    # 5.4 VISUALIZE ANOMALIES
-    # -------------------------------------------------------------------------
-    print("\n[5.4] VISUALIZING ANOMALIES")
-    print("-" * 80)
+    col1, col2 = st.columns(2)
     
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    with col1:
+        st.metric("Anomalies Detected (Isolation Forest)", 
+                  value=f"{num_anomalies_iso}",
+                  delta=f"{num_anomalies_iso/len(df)*100:.2f}% of total")
     
-    daily_avg = df.groupby('Date')['Total_Withdrawals'].mean().reset_index()
-    axes[0, 0].plot(daily_avg['Date'], daily_avg['Total_Withdrawals'], 
-                   color='steelblue', label='Normal', linewidth=1.5, alpha=0.7)
-    axes[0, 0].set_title('Withdrawal Over Time', fontsize=14, fontweight='bold')
-    axes[0, 0].set_xlabel('Date')
-    axes[0, 0].set_ylabel('Average Withdrawal ($)')
-    axes[0, 0].tick_params(axis='x', rotation=45)
-    axes[0, 0].grid(True, alpha=0.3)
+    with col2:
+        st.markdown("#### Anomaly Rate by Holiday/Event")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        anomaly_by_flag = df.groupby(['Holiday_Flag', 'Special_Event_Flag'])['Is_Anomaly_ZScore'].mean() * 100
+        anomaly_by_flag = anomaly_by_flag.unstack()
+        anomaly_by_flag.plot(kind='bar', ax=ax, colormap='RdYlGn', edgecolor='black')
+        ax.set_ylabel('Anomaly Rate (%)', fontsize=12)
+        ax.set_xlabel('Holiday Flag', fontsize=12)
+        ax.set_title('Anomaly Rate by Holiday/Event Flags', fontsize=14, fontweight='bold')
+        ax.tick_params(axis='x', rotation=0)
+        ax.legend(['No Event', 'Special Event'])
+        ax.grid(True, alpha=0.3, axis='y')
+        st.pyplot(fig)
+        plt.close()
     
-    axes[0, 1].hist(df['Withdrawal_ZScore'], bins=50, color='lightblue', edgecolor='black')
-    axes[0, 1].axvline(anomaly_threshold, color='red', linestyle='--', linewidth=2, 
-                     label=f'Threshold = ±{anomaly_threshold}')
-    axes[0, 1].axvline(-anomaly_threshold, color='red', linestyle='--', linewidth=2)
-    axes[0, 1].set_title('Distribution of Z-Scores', fontsize=14, fontweight='bold')
-    axes[0, 1].set_xlabel('Z-Score')
-    axes[0, 1].set_ylabel('Frequency')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    normal_mask = ~df['Is_Anomaly_ZScore']
-    axes[1, 0].scatter(df.loc[normal_mask, 'Total_Withdrawals'],
-                      df.loc[normal_mask, 'Total_Deposits'],
-                      color='steelblue', alpha=0.3, s=20, label='Normal')
-    axes[1, 0].scatter(df.loc[~normal_mask, 'Total_Withdrawals'],
-                      df.loc[~normal_mask, 'Total_Deposits'],
-                      color='red', alpha=0.7, s=50, label='Anomaly', edgecolors='black')
-    axes[1, 0].set_title('Anomalies: Withdrawals vs Deposits', fontsize=14, fontweight='bold')
-    axes[1, 0].set_xlabel('Total Withdrawals ($)')
-    axes[1, 0].set_ylabel('Total Deposits ($)')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    anomaly_by_flag = df.groupby(['Holiday_Flag', 'Special_Event_Flag'])['Is_Anomaly_ZScore'].mean() * 100
-    anomaly_by_flag = anomaly_by_flag.unstack()
-    anomaly_by_flag.plot(kind='bar', ax=axes[1, 1], colormap='RdYlGn', edgecolor='black')
-    axes[1, 1].set_title('Anomaly Rate by Holiday/Event Flags', fontsize=14, fontweight='bold')
-    axes[1, 1].set_ylabel('Anomaly Rate (%)')
-    axes[1, 1].set_xlabel('Holiday Flag')
-    axes[1, 1].tick_params(axis='x', rotation=0)
-    axes[1, 1].legend(['No Event', 'Special Event'])
-    axes[1, 1].grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    plt.savefig('visualizations/5.4_anomaly_visualizations.png', dpi=300, bbox_inches='tight')
-    print("  → Saved: visualizations/5.4_anomaly_visualizations.png")
-    plt.close()
+    # Anomaly Details
+    st.markdown('<h3 class="sub-header">📋 Detected Anomalies</h3>', 
+                unsafe_allow_html=True)
     
     anomalies_df = df[df['Is_Anomaly_ZScore']][['ATM_ID', 'Date', 'Day_of_Week', 'Time_of_Day',
                                                 'Total_Withdrawals', 'Total_Deposits',
                                                 'Holiday_Flag', 'Special_Event_Flag',
-                                                'Weather_Condition', 'Withdrawal_ZScore']]
-    anomalies_df.to_csv('anomalies_detected.csv', index=False)
-    print(f"\n  → Saved: anomalies_detected.csv ({len(anomalies_df)} anomalies)")
+                                                'Weather_Condition', 'Withdrawal_ZScore']].copy()
+    anomalies_df['Date'] = anomalies_df['Date'].dt.strftime('%Y-%m-%d')
     
-    print("\n" + "="*80)
-    print("✓ STAGE 5: ANOMALY DETECTION COMPLETED SUCCESSFULLY")
-    print("="*80)
-    
-    return df
+    st.dataframe(
+        anomalies_df.sort_values('Withdrawal_ZScore', ascending=False).style.format({
+            'Total_Withdrawals': '${:,.0f}',
+            'Total_Deposits': '${:,.0f}',
+            'Withdrawal_ZScore': '{:.2f}'
+        }),
+        use_container_width=True
+    )
 
 # =============================================================================
-# STAGE 6: INTERACTIVE PLANNER SCRIPT
+# INTERACTIVE PLANNER PAGE
 # =============================================================================
-
-def interactive_planner(df, atm_features, cluster_labels):
-    """
-    Stage 6: Interactive Planner Script
-    """
+def show_planner_page(df):
+    """Display the Interactive Planner page"""
+    st.markdown('<h1 class="main-header">📈 Interactive Planner</h1>', 
+                unsafe_allow_html=True)
     
-    print("\n" + "="*80)
-    print("STAGE 6: INTERACTIVE PLANNER")
-    print("="*80)
+    st.markdown("""
+    <div class="insight-box">
+        <h4>About Interactive Planner</h4>
+        <p>Filter and explore ATM data dynamically to gain specific insights for cash management decisions.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    df = df.merge(atm_features[['ATM_ID', 'Cluster', 'Cluster_Label', 
-                               'Avg_Withdrawals', 'Std_Withdrawals']], 
-                 on='ATM_ID', how='left')
+    # Filters
+    st.markdown('<h3 class="sub-header">🔧 Filter Options</h3>', 
+                unsafe_allow_html=True)
     
-    print("\n[6.1] INTERACTIVE EXPLORATION OPTIONS")
-    print("-" * 80)
-    print("The planner provides the following interactive capabilities:")
-    print("\n  1. Filter by Day of Week")
-    print("  2. Filter by Time of Day")
-    print("  3. Filter by Location Type")
-    print("  4. Filter by Cluster")
-    print("  5. View Holiday/Event Analysis")
-    print("  6. View Anomaly Analysis")
-    print("  7. Generate Comprehensive Report")
+    col1, col2, col3, col4 = st.columns(4)
     
-    print("\n[6.2] GENERATING INTERACTIVE VISUALIZATIONS")
-    print("-" * 80)
+    with col1:
+        selected_day = st.multiselect(
+            "Day of Week",
+            options=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+            default=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        )
     
-    # Generate comprehensive report
-    print("  Generating comprehensive report...")
+    with col2:
+        selected_time = st.multiselect(
+            "Time of Day",
+            options=['Morning', 'Afternoon', 'Evening', 'Night'],
+            default=['Morning', 'Afternoon', 'Evening', 'Night']
+        )
     
-    fig = plt.figure(figsize=(20, 16))
-    gs = fig.add_gridspec(4, 3, hspace=0.3, wspace=0.3)
+    with col3:
+        selected_location = st.multiselect(
+            "Location Type",
+            options=df['Location_Type'].unique().tolist(),
+            default=df['Location_Type'].unique().tolist()
+        )
     
-    ax1 = fig.add_subplot(gs[0, :])
-    daily_avg = df.groupby('Date')['Total_Withdrawals'].mean()
-    ax1.plot(daily_avg.index, daily_avg.values, color='steelblue', linewidth=1.5)
-    ax1.fill_between(daily_avg.index, daily_avg.values, alpha=0.3, color='steelblue')
-    ax1.set_title('Overall Withdrawal Trend', fontsize=14, fontweight='bold')
-    ax1.set_ylabel('Average Withdrawal ($)')
-    ax1.tick_params(axis='x', rotation=45)
-    ax1.grid(True, alpha=0.3)
+    with col4:
+        selected_weather = st.multiselect(
+            "Weather Condition",
+            options=df['Weather_Condition'].unique().tolist(),
+            default=df['Weather_Condition'].unique().tolist()
+        )
     
-    ax2 = fig.add_subplot(gs[1, 0])
-    dow_avg = df.groupby('Day_of_Week')['Total_Withdrawals'].mean()
-    dow_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    dow_avg = dow_avg.reindex(dow_order)
-    ax2.bar(dow_order, dow_avg.values, color='#FF6B6B', edgecolor='black')
-    ax2.set_title('Withdrawals by Day of Week', fontsize=12, fontweight='bold')
-    ax2.tick_params(axis='x', rotation=45)
-    ax2.grid(True, alpha=0.3, axis='y')
+    # Apply filters
+    filtered_df = df[
+        (df['Day_of_Week'].isin(selected_day)) &
+        (df['Time_of_Day'].isin(selected_time)) &
+        (df['Location_Type'].isin(selected_location)) &
+        (df['Weather_Condition'].isin(selected_weather))
+    ]
     
-    ax3 = fig.add_subplot(gs[1, 1])
-    cluster_counts = df['Cluster_Label'].value_counts()
-    ax3.pie(cluster_counts.values, labels=cluster_counts.index, autopct='%1.1f%%')
-    ax3.set_title('Cluster Distribution', fontsize=12, fontweight='bold')
+    # Display filtered stats
+    st.markdown('<h3 class="sub-header">📊 Filtered Results</h3>', 
+                unsafe_allow_html=True)
     
-    ax4 = fig.add_subplot(gs[1, 2])
-    holiday_impact = df.groupby('Holiday_Flag')['Total_Withdrawals'].mean()
-    ax4.bar(['Normal', 'Holiday'], holiday_impact.values, color=['#95E1D3', '#F38181'], edgecolor='black')
-    ax4.set_title('Holiday Impact', fontsize=12, fontweight='bold')
-    ax4.grid(True, alpha=0.3, axis='y')
+    col1, col2, col3, col4 = st.columns(4)
     
-    ax5 = fig.add_subplot(gs[2, 0])
-    tod_avg = df.groupby('Time_of_Day')['Total_Withdrawals'].mean()
-    tod_order = ['Morning', 'Afternoon', 'Evening', 'Night']
-    tod_avg = tod_avg.reindex(tod_order)
-    ax5.bar(tod_avg.index, tod_avg.values, color=['#FFD93D', '#6BCB77', '#4D96FF', '#FF6B6B'], edgecolor='black')
-    ax5.set_title('Withdrawals by Time of Day', fontsize=12, fontweight='bold')
-    ax5.tick_params(axis='x', rotation=45)
-    ax5.grid(True, alpha=0.3, axis='y')
+    with col1:
+        st.metric("Records", value=f"{len(filtered_df):,}")
     
-    ax6 = fig.add_subplot(gs[2, 1])
-    weather_avg = df.groupby('Weather_Condition')['Total_Withdrawals'].mean()
-    ax6.bar(weather_avg.index, weather_avg.values, color='purple', edgecolor='black')
-    ax6.set_title('Withdrawals by Weather', fontsize=12, fontweight='bold')
-    ax6.tick_params(axis='x', rotation=45)
-    ax6.grid(True, alpha=0.3, axis='y')
+    with col2:
+        st.metric("Avg Withdrawal", value=f"${filtered_df['Total_Withdrawals'].mean():,.0f}")
     
-    ax7 = fig.add_subplot(gs[2, 2])
-    anomaly_rate = df['Is_Anomaly_ZScore'].mean() * 100
-    ax7.bar(['Normal', 'Anomaly'], [100-anomaly_rate, anomaly_rate], 
-           color=['#95E1D3', '#F38181'], edgecolor='black')
-    ax7.set_title(f'Overall Anomaly Rate ({anomaly_rate:.2f}%)', fontsize=12, fontweight='bold')
-    ax7.grid(True, alpha=0.3, axis='y')
+    with col3:
+        st.metric("Max Withdrawal", value=f"${filtered_df['Total_Withdrawals'].max():,.0f}")
     
-    ax8 = fig.add_subplot(gs[3, :])
-    ax8.axis('off')
+    with col4:
+        st.metric("Total Volume", value=f"${filtered_df['Total_Withdrawals'].sum():,.0f}")
     
-    holiday_increase = 0
-    if df['Holiday_Flag'].sum() > 0:
-        holiday_increase = (df[df['Holiday_Flag']==1]['Total_Withdrawals'].mean() / 
-                           df[df['Holiday_Flag']==0]['Total_Withdrawals'].mean() - 1) * 100
+    # Visualizations
+    col1, col2 = st.columns(2)
     
-    stats_text = f"""
-    COMPREHENSIVE ANALYSIS SUMMARY
-    {'='*60}
-    Dataset Statistics:
-       • Total Records: {len(df):,}
-       • Number of ATMs: {df['ATM_ID'].nunique()}
-       • Date Range: {df['Date'].min().strftime('%Y-%m-%d')} to {df['Date'].max().strftime('%Y-%m-%d')}
+    with col1:
+        st.markdown("#### Withdrawal Distribution")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(filtered_df['Total_Withdrawals'], bins=30, color='skyblue', edgecolor='black')
+        ax.axvline(filtered_df['Total_Withdrawals'].mean(), color='red', linestyle='--', 
+                   linewidth=2, label=f'Mean: ${filtered_df["Total_Withdrawals"].mean():,.0f}')
+        ax.set_xlabel('Withdrawal Amount ($)', fontsize=12)
+        ax.set_ylabel('Frequency', fontsize=12)
+        ax.set_title('Distribution of Withdrawals (Filtered)', fontsize=14, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
     
-    Transaction Patterns:
-       • Average Daily Withdrawal: ${df['Total_Withdrawals'].mean():,.2f}
-       • Peak Withdrawal: ${df['Total_Withdrawals'].max():,}
-       • Highest Demand Day: {df.groupby('Day_of_Week')['Total_Withdrawals'].mean().idxmax()}
-       • Peak Time: {df.groupby('Time_of_Day')['Total_Withdrawals'].mean().idxmax()}
+    with col2:
+        st.markdown("#### By Selected Categories")
+        
+        if len(selected_day) > 0:
+            dow_avg = filtered_df.groupby('Day_of_Week')['Total_Withdrawals'].mean()
+            dow_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            dow_avg = dow_avg.reindex([d for d in dow_order if d in selected_day])
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE']
+            ax.bar(dow_avg.index, dow_avg.values, color=colors[:len(dow_avg)], edgecolor='black')
+            ax.set_xlabel('Day of Week', fontsize=12)
+            ax.set_ylabel('Average Withdrawal ($)', fontsize=12)
+            ax.set_title('Average Withdrawals by Day (Filtered)', fontsize=14, fontweight='bold')
+            ax.tick_params(axis='x', rotation=45)
+            ax.grid(True, alpha=0.3, axis='y')
+            st.pyplot(fig)
+            plt.close()
     
-    Key Insights:
-       • Holidays {'increase' if holiday_increase > 0 else 'change'} demand by {abs(holiday_increase):.1f}%
-       • {len(cluster_labels)} distinct ATM clusters identified
-       • {anomaly_rate:.2f}% of transactions flagged as anomalies
-    """
+    # Data preview
+    st.markdown('<h3 class="sub-header">📋 Data Preview</h3>', 
+                unsafe_allow_html=True)
     
-    ax8.text(0.5, 0.5, stats_text, ha='center', va='center', fontsize=11,
-            family='monospace', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    display_cols = ['ATM_ID', 'Date', 'Day_of_Week', 'Time_of_Day', 'Total_Withdrawals',
+                   'Total_Deposits', 'Location_Type', 'Weather_Condition']
     
-    plt.suptitle('ATM INTELLIGENCE - COMPREHENSIVE REPORT', fontsize=18, fontweight='bold', y=0.98)
-    plt.savefig('visualizations/6.comprehensive_report.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print("    ✓ Comprehensive report: visualizations/6.comprehensive_report.png")
+    st.dataframe(
+        filtered_df[display_cols].head(100).style.format({
+            'Total_Withdrawals': '${:,.0f}',
+            'Total_Deposits': '${:,.0f}'
+        }),
+        use_container_width=True
+    )
     
-    print("\n[6.3] SAVING FILTERED DATASETS")
-    print("-" * 80)
-    
-    df.to_csv('atm_data_complete.csv', index=False)
-    print("  ✓ Saved: atm_data_complete.csv")
-    
-    summary_stats = {
-        'Total Records': len(df),
-        'Unique ATMs': df['ATM_ID'].nunique(),
-        'Date Range Start': df['Date'].min().strftime('%Y-%m-%d'),
-        'Date Range End': df['Date'].max().strftime('%Y-%m-%d'),
-        'Avg Daily Withdrawal': df['Total_Withdrawals'].mean(),
-        'Max Daily Withdrawal': df['Total_Withdrawals'].max(),
-        'Total Anomalies': df['Is_Anomaly_ZScore'].sum(),
-        'Anomaly Rate (%)': df['Is_Anomaly_ZScore'].mean() * 100,
-        'Holiday Change (%)': holiday_increase,
-        'Number of Clusters': len(cluster_labels)
-    }
-    
-    summary_df = pd.DataFrame.from_dict(summary_stats, orient='index', columns=['Value'])
-    summary_df.to_csv('analysis_summary.csv')
-    print("  ✓ Saved: analysis_summary.csv")
-    
-    print("\n" + "="*80)
-    print("✓ STAGE 6: INTERACTIVE PLANNER COMPLETED SUCCESSFULLY")
-    print("="*80)
+    # Download option
+    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download Filtered Data as CSV",
+        data=csv,
+        file_name='filtered_atm_data.csv',
+        mime='text/csv'
+    )
 
 # =============================================================================
-# MAIN EXECUTION
+# MAIN FUNCTION
 # =============================================================================
-
 def main():
-    """
-    Main execution function that runs all stages of the analysis
-    """
+    """Main function to run the Streamlit app"""
     
-    print("\n")
-    print("╔" + "="*78 + "╗")
-    print("║" + " "*20 + "ATM INTELLIGENCE DEMAND FORECASTING" + " "*22 + "║")
-    print("║" + " "*15 + "Formative Assessment 2 - Data Mining Analysis" + " "*17 + "║")
-    print("╚" + "="*78 + "╝")
+    # Load data
+    try:
+        df = load_data()
+    except FileNotFoundError:
+        st.error("Dataset file 'atm_cash_management_dataset.csv' not found!")
+        st.stop()
     
-    df = load_data()
-    perform_eda(df)
-    atm_features, cluster_labels = perform_clustering(df)
-    df = perform_anomaly_detection(df)
-    interactive_planner(df, atm_features, cluster_labels)
+    # Create sidebar
+    page, date_range, selected_atm, selected_location = create_sidebar()
     
-    print("\n")
-    print("╔" + "="*78 + "╗")
-    print("║" + " "*25 + "ANALYSIS COMPLETE" + " "*31 + "║")
-    print("╠" + "="*78 + "╣")
-    print("║  All stages completed successfully!                                            ║")
-    print("║                                                                                ║")
-    print("║  Outputs generated:                                                           ║")
-    print("║  • visualizations/: All EDA, clustering, and anomaly visualizations           ║")
-    print("║  • atm_data_complete.csv: Complete dataset with all analyses                   ║")
-    print("║  • atm_cluster_assignments.csv: ATM cluster assignments                        ║")
-    print("║  • anomalies_detected.csv: List of detected anomalies                          ║")
-    print("║  • analysis_summary.csv: Summary statistics                                   ║")
-    print("╚" + "="*78 + "╝")
-    print()
+    # Filter data based on sidebar selections
+    filtered_df = filter_data(df, date_range, selected_atm, selected_location)
+    
+    # Show selected page
+    if page == "🏠 Home":
+        show_home_page(filtered_df)
+    elif page == "📊 EDA":
+        show_eda_page(filtered_df)
+    elif page == "🎯 Clustering":
+        show_clustering_page(filtered_df)
+    elif page == "🔍 Anomaly Detection":
+        show_anomaly_page(filtered_df)
+    elif page == "📈 Interactive Planner":
+        show_planner_page(filtered_df)
+    
+    # Display mascot/logo at bottom
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; padding: 20px;">
+        <p style="color: #666; font-size: 12px;">
+            ATM Intelligence Demand Forecasting | Formative Assessment 2
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Load mascot image
+    try:
+        st.image("mascot.png", width=100, caption="FinTrust Bank Mascot")
+    except:
+        # If no mascot image, display a placeholder
+        st.markdown("""
+        <div style="text-align: center; padding: 10px;">
+            <span style="font-size: 50px;">🏦</span>
+            <p style="color: #666; font-size: 12px;">FinTrust Bank Ltd.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
+# =============================================================================
+# RUN APP
+# =============================================================================
 if __name__ == "__main__":
     main()

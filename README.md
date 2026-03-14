@@ -12,9 +12,13 @@ Too little cash causes service disruption, while too much cash leads to ineffici
 This dashboard helps financial institutions:
 
 • Analyze ATM transaction patterns
+
 • Identify high-demand ATMs
+
 • Detect unusual withdrawal activity
+
 • Support smarter cash management decisions
+
 
 The application uses Exploratory Data Analysis, Machine Learning clustering, and anomaly detection to generate insights from ATM transaction data.
 
@@ -23,13 +27,21 @@ The application uses Exploratory Data Analysis, Machine Learning clustering, and
 The project is implemented using the following technologies:
 
 Technology	Purpose
+
 Python	Core programming language
+
 Streamlit	Interactive web dashboard
+
 Pandas	Data manipulation and analysis
+
 NumPy	Numerical computations
+
 Matplotlib	Data visualization
+
 Seaborn	Statistical visualization
+
 Scikit-learn	Machine learning models
+
 
 📁 Project Structure
 ATM-Intelligence-Dashboard/
@@ -47,9 +59,13 @@ ATM-Intelligence-Dashboard/
 Files Explanation
 
 • app.py – Main Streamlit application
+
 • atm_cash_management_dataset.csv – ATM transaction dataset
+
 • mascot.png – Dashboard mascot/logo
+
 • README.md – Project documentation
+
 
 🚀 Features
 
@@ -60,10 +76,15 @@ The dashboard contains five main analytical sections.
 Provides an overview of ATM data including:
 
 • Total records
+
 • Number of ATMs
+
 • Average withdrawals
+
 • Total transaction volume
+
 • Timeline of ATM withdrawals
+
 
 This page gives users a quick summary of the entire dataset.
 
@@ -74,10 +95,15 @@ The EDA section helps users understand ATM usage patterns.
 It includes:
 
 • Withdrawal and deposit distributions
+
 • Boxplots for detecting outliers
+
 • Daily and monthly transaction trends
+
 • Impact of holidays and special events
+
 • Weather and location analysis
+
 • Correlation heatmap between variables
 
 These visualizations help identify patterns that influence ATM demand.
@@ -95,13 +121,17 @@ Feature scaling using StandardScaler
 Optimal cluster selection using:
 
 • Elbow Method
+
 • Silhouette Score
 
 Clusters are categorized as:
 
 • High-Demand ATMs
+
 • Steady-Demand ATMs
+
 • Low-Demand ATMs
+
 
 This helps banks prioritize cash replenishment.
 
@@ -122,17 +152,24 @@ A machine learning algorithm used for detecting anomalies in multidimensional da
 This helps detect:
 
 • Unexpected spikes in withdrawals
+
 • Unusual ATM behavior
+
 • Potential system issues
+
 
 📈 Interactive Planner
 
 The interactive planner allows users to filter ATM data dynamically based on:
 
 • Day of week
+
 • Time of day
+
 • Location type
+
 • Weather conditions
+
 
 Users can explore customized insights and download filtered datasets for further analysis.
 
@@ -154,9 +191,13 @@ Identifies statistical outliers.
 The dashboard helps identify:
 
 • Peak withdrawal days
+
 • Best performing ATM locations
+
 • Holiday impact on ATM usage
+
 • High-demand ATMs requiring frequent cash replenishment
+
 • Unusual withdrawal patterns
 
 This project demonstrates how data mining and machine learning techniques can be applied to real-world banking problems such as ATM cash demand forecasting.
@@ -164,8 +205,11 @@ This project demonstrates how data mining and machine learning techniques can be
 It integrates:
 
 • Data analysis
+
 • Visualization
+
 • Machine learning
+
 • Interactive dashboards
 
 Project developed for Formative Assessment 2 – Interactive Data Mining Application.

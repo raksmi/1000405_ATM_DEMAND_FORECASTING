@@ -35,9 +35,13 @@ Scikit-learn	Machine learning models
 ATM-Intelligence-Dashboard/
 │
 ├── app.py
+
 ├── atm_cash_management_dataset.csv
+
 ├── mascot.png
+
 ├── README.md
+
 
 Files Explanation
 

@@ -1194,7 +1194,7 @@ def main():
     
     # Load mascot image
     try:
-        st.image("mascot.png", width=100, caption="FinTrust Bank Mascot")
+        st.image("mascot.png", width=500, caption="FinTrust Bank Mascot")
     except:
         # If no mascot image, display a placeholder
         st.markdown("""
